@@ -82,13 +82,15 @@ foreach ($br in $profilesRoots) {
         if (-not $sqlite) { $browserNotes += ($br.name + ' ' + $p.Name + '：缺少 sqlite3.exe，跳过'); continue }
         $tmp = Join-Path $OutDir ('_login_' + $br.name + '_' + $p.Name + '.db')
         Copy-Item -LiteralPath $db -Destination $tmp -Force
-        $q = "select origin_url, username_value, case when last_used=0 then '' else datetime(last_used,'unixepoch','localtime') end from logins where blacklisted_by_user=0 order by origin_url;"
-        $rows = & $sqlite $tmp $q
-        if (($rows -join ' ') -match 'no such column') {
+        $cols = (& $sqlite $tmp "pragma table_info(logins);" 2>$null) -join ' '
+        if ($cols -match '\|last_used\|') {
+            $q = "select origin_url, username_value, case when last_used=0 then '' else datetime(last_used,'unixepoch','localtime') end from logins where blacklisted_by_user=0 order by origin_url;"
+        }
+        else {
             # 旧版 Chromium 没有 last_used 列，退回只取站点与账号
             $q = "select origin_url, username_value, '' from logins where blacklisted_by_user=0 order by origin_url;"
-            $rows = & $sqlite $tmp $q
         }
+        $rows = (& $sqlite $tmp $q 2>$null)
         Remove-Item -LiteralPath $tmp -Force
         foreach ($r in $rows) {
             if (-not $r -or $r -match '^(Error|no such)') { continue }
